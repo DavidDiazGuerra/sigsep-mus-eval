@@ -70,6 +70,8 @@ class TrackStore(object):
                     "ISR": self._q(values["ISR"][i]),
                 },
             }
+            if "SISDR" in values:
+                frame_data["metrics"]["SISDR"] = self._q(values["SISDR"][i])
             target_data["frames"].append(frame_data)
 
         self.scores["targets"].append(target_data)
@@ -108,10 +110,11 @@ class TrackStore(object):
         str
             frames_aggreagted values of all target metrics
         """
+        metrics = list(self.scores["targets"][0]["frames"][0]["metrics"].keys())
         out = ""
         for t in self.scores["targets"]:
             out += t["name"].ljust(16) + "==> "
-            for metric in ["SDR", "SIR", "ISR", "SAR"]:
+            for metric in metrics:
                 out += (
                     metric
                     + ":"
@@ -254,12 +257,13 @@ class EvalStore(object):
 
     def __repr__(self):
         targets = self.df["target"].unique()
+        metrics = list(self.agg_frames_tracks_scores().unstack().columns)
         out = "Aggrated Scores ({} over frames, {} over tracks)\n".format(
             self.frames_agg, self.tracks_agg
         )
         for target in targets:
             out += target.ljust(16) + "==> "
-            for metric in ["SDR", "SIR", "ISR", "SAR"]:
+            for metric in metrics:
                 out += (
                     metric
                     + ":"
@@ -409,6 +413,7 @@ def json2df(json_string, track_name):
     track_name : str
     """
 
+    metrics = list(json_string["targets"][0]["frames"][0]["metrics"].keys())
     df = pd.json_normalize(json_string["targets"], ["frames"], ["name"])
 
     df.columns = [col.replace("metrics.", "") for col in df.columns]
@@ -418,7 +423,7 @@ def json2df(json_string, track_name):
         var_name="metric",
         value_name="score",
         id_vars=["time", "name"],
-        value_vars=["SDR", "SAR", "ISR", "SIR"],
+        value_vars=metrics,
     )
     df["track"] = track_name
     df = df.rename(index=str, columns={"name": "target"})

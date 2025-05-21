@@ -53,6 +53,9 @@ import itertools
 import collections
 import warnings
 
+from torchmetrics.functional.audio import scale_invariant_signal_distortion_ratio
+import torch
+
 # The maximum allowable number of sources (prevents insane computational load)
 MAX_SOURCES = 100
 
@@ -167,6 +170,7 @@ def bss_eval(
     filters_len=512,
     framewise_filters=False,
     bsseval_sources_version=False,
+    compute_sisdr=False,
 ):
     """BSS_EVAL version 4.
 
@@ -281,8 +285,14 @@ def bss_eval(
     framer = Framing(window, hop, nsampl)
     nwin = framer.nwin
 
-    (SDR, ISR, SIR, SAR) = list(range(4))
-    s_r = np.empty((4, nsrc, nsrc, nwin))
+    if compute_sisdr:
+        nmetrics = 5
+        (SDR, ISR, SIR, SAR, SISDR) = list(range(nmetrics))
+        s_r = np.empty((nmetrics, nsrc, nsrc, nwin))
+    else:
+        nmetrics = 4
+        (SDR, ISR, SIR, SAR) = list(range(nmetrics))
+        s_r = np.empty((nmetrics, nsrc, nsrc, nwin))
 
     # define helper functions for computing filters on windows of the signals
     def compute_GsfC(win=slice(0, nsampl)):
@@ -332,9 +342,14 @@ def bss_eval(
                         C[jest],
                         Cj[jtrue, jest, 0],
                     )
-                    s_r[:, jtrue, jest, t] = _bss_crit(
+                    s_r[:4, jtrue, jest, t] = _bss_crit(
                         s_true, e_spat, e_interf, e_artif, bsseval_sources_version
                     )
+                    if compute_sisdr:
+                        s_r[4, jtrue, jest, t] = scale_invariant_signal_distortion_ratio(
+                            torch.from_numpy(estimated_sources[jest, win].T),
+                            torch.from_numpy(reference_sources[jtrue, win].T)
+                        )
                     done[jtrue, jest] = True
 
     # select the best ordering
@@ -359,11 +374,14 @@ def bss_eval(
     if not framewise_filters:
         result = s_r[:, dum, popt[:, 0], :]
     else:
-        result = np.empty((4, nsrc, nwin))
-        for m, t in itertools.product(list(range(4)), list(range(nwin))):
+        result = np.empty((nmetrics, nsrc, nwin))
+        for m, t in itertools.product(list(range(nmetrics)), list(range(nwin))):
             result[m, :, t] = s_r[m, dum, popt[:, t], t]
 
-    return (result[SDR], result[ISR], result[SIR], result[SAR], popt)
+    if compute_sisdr:
+        return (result[SDR], result[ISR], result[SIR], result[SAR], result[SISDR], popt)
+    else:
+        return (result[SDR], result[ISR], result[SIR], result[SAR], popt)
 
 
 def bss_eval_sources(reference_sources, estimated_sources, compute_permutation=True):

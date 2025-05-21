@@ -134,7 +134,7 @@ def eval_mus_dir(dataset, estimates_dir, output_dir=None, ext="wav"):
         )
 
 
-def eval_mus_track(track, user_estimates, output_dir=None, mode="v4", win=1.0, hop=1.0):
+def eval_mus_track(track, user_estimates, output_dir=None, mode="v4", win=1.0, hop=1.0, compute_sisdr=False):
     """Compute all bss_eval metrics for the musdb track and estimated signals,
     given by a `user_estimates` dict.
 
@@ -151,6 +151,8 @@ def eval_mus_track(track, user_estimates, output_dir=None, mode="v4", win=1.0, h
         bsseval version number. Defaults to 'v4'.
     win : int
         window size in
+    compute_sisdr : Bool
+        Whether to compute SISDR metrics. Defaults to `False`.
 
     Returns
     -------
@@ -190,13 +192,18 @@ def eval_mus_track(track, user_estimates, output_dir=None, mode="v4", win=1.0, h
             audio_estimates.append(user_estimates[target])
             audio_reference.append(track.targets[target].audio)
 
-        SDR, ISR, SIR, SAR = evaluate(
+        outputs = evaluate(
             audio_reference,
             audio_estimates,
             win=int(win * track.rate),
             hop=int(hop * track.rate),
             mode=mode,
+            compute_sisdr=compute_sisdr
         )
+        if compute_sisdr:
+            SDR, ISR, SIR, SAR, SISDR = outputs
+        else:
+            SDR, ISR, SIR, SAR = outputs
 
         # iterate over all evaluation results except for vocals
         for i, target in enumerate(eval_targets):
@@ -209,6 +216,8 @@ def eval_mus_track(track, user_estimates, output_dir=None, mode="v4", win=1.0, h
                 "ISR": ISR[i].tolist(),
                 "SAR": SAR[i].tolist(),
             }
+            if compute_sisdr:
+                values["SISDR"] = SISDR[i].tolist()
 
             data.add_target(target_name=target, values=values)
     elif not has_acc:
@@ -230,13 +239,18 @@ def eval_mus_track(track, user_estimates, output_dir=None, mode="v4", win=1.0, h
             audio_estimates.append(user_estimates[target])
             audio_reference.append(track.targets[target].audio)
 
-        SDR, ISR, SIR, SAR = evaluate(
+        outputs = evaluate(
             audio_reference,
             audio_estimates,
             win=int(win * track.rate),
             hop=int(hop * track.rate),
             mode=mode,
+            compute_sisdr=compute_sisdr
         )
+        if compute_sisdr:
+            SDR, ISR, SIR, SAR, SISDR = outputs
+        else:
+            SDR, ISR, SIR, SAR = outputs
 
         # iterate over all targets
         for i, target in enumerate(eval_targets):
@@ -246,6 +260,8 @@ def eval_mus_track(track, user_estimates, output_dir=None, mode="v4", win=1.0, h
                 "ISR": ISR[i].tolist(),
                 "SAR": SAR[i].tolist(),
             }
+            if compute_sisdr:
+                values["SISDR"] = SISDR[i].tolist()
 
             data.add_target(target_name=target, values=values)
 
@@ -303,7 +319,7 @@ def pad_or_truncate(audio_reference, audio_estimates):
 
 
 def evaluate(
-    references, estimates, win=1 * 44100, hop=1 * 44100, mode="v4", padding=True
+    references, estimates, win=1 * 44100, hop=1 * 44100, mode="v4", padding=True, compute_sisdr=False
 ):
     """BSS_EVAL images evaluation using metrics module
 
@@ -319,6 +335,8 @@ def evaluate(
         hop size in samples, defaults to 44100 (no overlap)
     mode : str
         BSSEval version, default to `v4`
+    compute_sisdr : bool, defaults to `False`
+        Compute the scale-invariant SDR
     Returns
     -------
     SDR : np.ndarray, shape=(nsrc,)
@@ -329,6 +347,8 @@ def evaluate(
         vector of Source to Interference Ratios (SIR)
     SAR : np.ndarray, shape=(nsrc,)
         vector of Sources to Artifacts Ratios (SAR)
+    SISDR : np.ndarray, shape=(nsrc,)
+        vector of Scale-Invariant Sources to Interference Ratios (SISDR)
     """
 
     estimates = np.array(estimates)
@@ -337,7 +357,7 @@ def evaluate(
     if padding:
         references, estimates = pad_or_truncate(references, estimates)
 
-    SDR, ISR, SIR, SAR, _ = metrics.bss_eval(
+    outputs = metrics.bss_eval(
         references,
         estimates,
         compute_permutation=False,
@@ -345,6 +365,12 @@ def evaluate(
         hop=hop,
         framewise_filters=(mode == "v3"),
         bsseval_sources_version=False,
+        compute_sisdr=compute_sisdr,
     )
 
-    return SDR, ISR, SIR, SAR
+    if compute_sisdr:
+        SDR, ISR, SIR, SAR, SISDR, _ = outputs
+        return SDR, ISR, SIR, SAR, SISDR
+    else:
+        SDR, ISR, SIR, SAR, _ = outputs
+        return SDR, ISR, SIR, SAR
