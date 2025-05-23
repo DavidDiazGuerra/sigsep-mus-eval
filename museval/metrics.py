@@ -53,9 +53,6 @@ import itertools
 import collections
 import warnings
 
-from torchmetrics.functional.audio import scale_invariant_signal_distortion_ratio
-import torch
-
 # The maximum allowable number of sources (prevents insane computational load)
 MAX_SOURCES = 100
 
@@ -329,8 +326,6 @@ def bss_eval(
         # loop over all permutations
         done = np.zeros((nsrc, nsrc))
 
-        ref_slice = reference_sources[:, win]
-        est_slice = estimated_sources[:, win]
         for jtrue in range(nsrc):
             for k, jest in enumerate(candidate_permutations[:, jtrue]):
                 # if we have a silent frame set results as np.nan
@@ -346,10 +341,7 @@ def bss_eval(
                         s_true, e_spat, e_interf, e_artif, bsseval_sources_version
                     )
                     if compute_sisdr:
-                        s_r[4, jtrue, jest, t] = scale_invariant_signal_distortion_ratio(
-                            torch.from_numpy(estimated_sources[jest, win].T),
-                            torch.from_numpy(reference_sources[jtrue, win].T)
-                        )
+                        s_r[4, jtrue, jest, t] = _sisdr(reference_sources[jtrue, win], estimated_sources[jest, win])
                     done[jtrue, jest] = True
 
     # select the best ordering
@@ -690,6 +682,13 @@ def _bss_crit(s_true, e_spat, e_interf, e_artif, bsseval_sources_version):
         sar = _safe_db(np.sum((s_true + e_spat + e_interf) ** 2), np.sum(e_artif**2))
 
     return (sdr, isr, sir, sar)
+
+
+def _sisdr(reference_source, estimated_source):
+    """Compute the SI-SDR"""
+    alpha = np.sum(estimated_source * reference_source) / (np.sum(reference_source**2) + np.finfo(float).eps)
+    sisdr = _safe_db(np.sum((alpha * reference_source)**2), np.sum((alpha * reference_source - estimated_source)**2))
+    return sisdr
 
 
 def _safe_db(num, den):
