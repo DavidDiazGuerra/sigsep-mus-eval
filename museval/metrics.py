@@ -167,6 +167,7 @@ def bss_eval(
     filters_len=512,
     framewise_filters=False,
     bsseval_sources_version=False,
+    rel_energy_th_db=None,
     compute_sisdr=False,
 ):
     """BSS_EVAL version 4.
@@ -228,6 +229,15 @@ def bss_eval(
           those to also be zeroed in the references, and hence not evaluated,
           artificially boosting results. For this reason, SiSEC always uses
           the `bss_eval_images` version, corresponding to ``False``.
+      rel_energy_th_db : float, optional
+          if not ``None`` (default) the frames whose energy is rel_energy_th_db
+          bellow the peak energy of the channel will be excluded from the computation
+          of the metrics. This way we can exclude frames which are silent and make
+          the metrics more stable if reference_sources has not gone through a
+          noise gate.
+      compute_sisdr : bool, optional
+          if ``True``, compute the scale-invariant SDR apart from the orignal
+          museval metrics.
 
       Returns
       -------
@@ -315,6 +325,13 @@ def bss_eval(
         # compute filters on whole signals if no framewise filters
         (G, sf, C) = compute_GsfC()
         Cj = compute_Cj()
+
+    if rel_energy_th_db is not None:
+        ref_e = np.stack([np.mean(reference_sources[:,frame,:] ** 2, axis=1) for frame in Framing(window, hop, nsampl)],
+                         axis=1)
+        valid_frames = ref_e > ref_e.max(1, keepdims=True) * 10**(-rel_energy_th_db/10)
+        for t, frame in enumerate(Framing(window, hop, nsampl)):
+            reference_sources[:,frame,:] *= valid_frames[:,t,np.newaxis,:]
 
     # loop over all windows
     for t, win in enumerate(framer):

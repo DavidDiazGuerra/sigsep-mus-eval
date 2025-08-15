@@ -134,7 +134,8 @@ def eval_mus_dir(dataset, estimates_dir, output_dir=None, ext="wav"):
         )
 
 
-def eval_mus_track(track, user_estimates, output_dir=None, mode="v4", win=1.0, hop=1.0, compute_sisdr=False):
+def eval_mus_track(track, user_estimates, output_dir=None, mode="v4", win=1.0, hop=1.0,
+                   compute_sisdr=False, rel_energy_th_db=None):
     """Compute all bss_eval metrics for the musdb track and estimated signals,
     given by a `user_estimates` dict.
 
@@ -153,6 +154,10 @@ def eval_mus_track(track, user_estimates, output_dir=None, mode="v4", win=1.0, h
         window size in
     compute_sisdr : Bool
         Whether to compute SISDR metrics. Defaults to `False`.
+    rel_energy_th_db : float
+        if not `None`, the frames bellow this threshold w.r.t. the source maximum
+        energy will be excluded from the computation of the metrics to avoid silent
+        frames and make the metrics more stable.
 
     Returns
     -------
@@ -198,7 +203,8 @@ def eval_mus_track(track, user_estimates, output_dir=None, mode="v4", win=1.0, h
             win=int(win * track.rate),
             hop=int(hop * track.rate),
             mode=mode,
-            compute_sisdr=compute_sisdr
+            compute_sisdr=compute_sisdr,
+            rel_energy_th_db=rel_energy_th_db
         )
         if compute_sisdr:
             SDR, ISR, SIR, SAR, SISDR = outputs
@@ -319,7 +325,8 @@ def pad_or_truncate(audio_reference, audio_estimates):
 
 
 def evaluate(
-    references, estimates, win=1 * 44100, hop=1 * 44100, mode="v4", padding=True, compute_sisdr=False
+    references, estimates, win=1 * 44100, hop=1 * 44100, mode="v4", padding=True,
+    compute_sisdr=False, rel_energy_th_db=None,
 ):
     """BSS_EVAL images evaluation using metrics module
 
@@ -337,6 +344,8 @@ def evaluate(
         BSSEval version, default to `v4`
     compute_sisdr : bool, defaults to `False`
         Compute the scale-invariant SDR
+    rel_energy_th_db: float, defaults to None
+        relative energy threshold (in dB) to exclude silent frames
     Returns
     -------
     SDR : np.ndarray, shape=(nsrc,)
@@ -366,6 +375,7 @@ def evaluate(
         framewise_filters=(mode == "v3"),
         bsseval_sources_version=False,
         compute_sisdr=compute_sisdr,
+        rel_energy_th_db=rel_energy_th_db
     )
 
     if compute_sisdr:
