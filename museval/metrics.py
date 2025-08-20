@@ -330,8 +330,7 @@ def bss_eval(
         ref_e = np.stack([np.mean(reference_sources[:,frame,:] ** 2, axis=1) for frame in Framing(window, hop, nsampl)],
                          axis=1)
         valid_frames = ref_e > ref_e.max(1, keepdims=True) * 10**(-rel_energy_th_db/10)
-        for t, frame in enumerate(Framing(window, hop, nsampl)):
-            reference_sources[:,frame,:] *= valid_frames[:,t,np.newaxis,:]
+        valid_frames = valid_frames.any(axis=-1)
 
     # loop over all windows
     for t, win in enumerate(framer):
@@ -386,6 +385,9 @@ def bss_eval(
         result = np.empty((nmetrics, nsrc, nwin))
         for m, t in itertools.product(list(range(nmetrics)), list(range(nwin))):
             result[m, :, t] = s_r[m, dum, popt[:, t], t]
+
+    if rel_energy_th_db is not None:
+        result[:, np.logical_not(valid_frames)] = np.nan
 
     if compute_sisdr:
         return (result[SDR], result[ISR], result[SIR], result[SAR], result[SISDR], popt)
